@@ -1,0 +1,103 @@
+{% extends "main.html" %}
+{% block content %}
+<style>
+    .room-container {
+        display: grid;
+        grid-template-columns: 3fr 1fr;
+        gap: 20px;
+    }
+    
+    .comment_form {
+        margin-top: 20px;
+        margin-bottom: 50px;
+        width: 100%;
+    }
+    
+    .comment_form input[type="text"] {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        display: block;
+    }
+    
+    .comment-submit-btn {
+        margin-top: 10px;
+        padding: 8px 16px;
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .message-container {
+        margin-bottom: 15px;
+    }
+
+    /* Force comment form to always be visible */
+    #comment-form-container {
+        display: block !important;
+    }
+</style>
+
+<div class="room-container">
+    <div>
+        <h1>{{room.name}}</h1>
+        <p>{{room.description}}</p>
+        <p>Created by: {{room.host}}</p>
+        <div class="comment-wrapper">
+            <h3>Conversations</h3>
+            <hr>
+            {% for message in room_messages %}
+            <div class="message-container">
+                <a href="{% url 'delete-message' message.id %}">delete</a>
+                <small>@{{message.user}} {{message.created|timesince}} ago</small>
+                <p>{{message.body}}</p>
+                <hr>
+            </div>
+            {% endfor %}
+           
+            <!-- Always show the form container - no conditional here -->
+            <div class="comment_form" id="comment-form-container">
+                {% if request.user.is_authenticated %}
+                    <form method="POST" action="{% url 'room' room.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="room_id" value="{{ room.id }}">
+                        <input type="text" name="body" placeholder="Add a comment..." required>
+                        <button type="submit" class="comment-submit-btn">Submit</button>
+                    </form>
+                {% else %}
+                    <p>Please <a href="{% url 'login' %}">login</a> to participate in this conversation.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div>
+        <h3>Participants ({{participants.count}})</h3>
+        <hr>
+        {% for member in participants %}
+        <div>
+            <small>@{{member.username}}</small>
+            {% if member == room.host %}
+            <p>Host</p>
+            {% endif %}
+            {% if member == request.user %}
+            <p>You</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Simple JavaScript to ensure visibility -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const formContainer = document.getElementById('comment-form-container');
+        if (formContainer) {
+            formContainer.style.display = 'block';
+        }
+    });
+</script>
+{% endblock %}
