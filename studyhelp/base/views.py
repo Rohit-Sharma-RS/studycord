@@ -9,6 +9,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.forms import UserCreationForm
 from .models import Room, Topic, User, Message
+from .forms import RoomForm, UserForm
 
 # rooms = [
 #     {'id': 1, 'name': "Let's learn python"},
@@ -118,9 +119,6 @@ def userProfile(request, pk):
 def createRoom(request):
     form = RoomForm()
 
-    if request.user != room.host: # only edit your own room
-        return HttpResponse('You are not allowed here!')
-
     if request.method == "POST":
         form = RoomForm(request.POST)
         if form.is_valid():
@@ -149,6 +147,8 @@ def deleteMessage(request, pk):
 
 def updateRoom(request, pk):
     room = Room.objects.get(id=pk)
+    if request.user != room.host:
+        return HttpResponse('You are not allowed here!')
     form  = RoomForm(instance=room)
     if request.method=="POST":
         form = RoomForm(request.POST, instance=room)
@@ -160,6 +160,14 @@ def updateRoom(request, pk):
     return render(request, 'base/room_form.html', context)
 
 @login_required(login_url='/login') # only logged in users can delete room
-def updateUser(request):
-    context={}
+def updateUser(request, pk):
+    user = request.user
+    form = UserForm(instance=user)
+    if request.method=="POST":
+        form = UserForm(request.POST, instance=user) # instance=user to update the user in place
+        # form = UserForm(request.POST) # this creates a new user instead of updating the existing one
+        if form.is_valid():
+            form.save()
+            return redirect('user-profile', pk=user.id)
+    context={'form': form}
     return render(request, 'base/update-user.html', context)

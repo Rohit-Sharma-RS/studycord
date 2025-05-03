@@ -11,7 +11,7 @@
 
 <h1>{{user.username}}'s Profile</h1>
 {%if request.user == user %}
-<a href="{% url 'update-user' user.id %}">Update Profile</a>
+<a href="{% url 'update-user' user.id %}">Update Profile</a>{% else %}
 {% endif %}
 <div class="profile-container">
     <div>
