@@ -11,7 +11,8 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
-
+import dotenv
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -31,8 +32,8 @@ SECRET_KEY = 'django-insecure-6u-+v^gvp^m*sgh#)21g$z^oyp%0)lqp_=d%c-voyo0!p9g%3w
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']  # or ['*']
+# ALLOWED_HOSTS = ['yourdomain.com', 'www.yourdomain.com']
 
 # Application definition
 
@@ -60,14 +61,21 @@ MIDDLEWARE = [
 
 CHANNEL_LAYERS = {
     'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer'
-        # For production we use Redis:
-        # 'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        # 'CONFIG': {
-        #     "hosts": [('127.0.0.1', 6379)],
-        # },
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
     },
 }
+
+# CHANNEL_LAYERS = {
+#     'default': {
+#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
+#         'CONFIG': {
+#             'hosts': [('127.0.0.1', 8000)],
+#             'symmetric_encryption_keys': [SECRET_KEY],
+#         },
+#     },
+# }
+
+ASGI_APPLICATION = 'studyhelp.asgi.application'
 
 ROOT_URLCONF = 'studyhelp.urls'
 
@@ -145,17 +153,26 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-# Email configuration
+# Email configuration - UPDATED - CHOOSE ONE BACKEND
+
+# For development, you can use Django's console email backend to see emails in console
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# For production - actually sends emails
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'  # Or your preferred email provider
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'vampire.instinct777@gmail.com'  # Use environment variables in production
-EMAIL_HOST_PASSWORD = 'ryumvmufdzrgguae'  # Use environment variables in production
+load_dotenv()  # Load environment variables from .env file
+EMAIL_HOST_PASSWORD = os.environ['EMAIL_PASS']  # Use environment variables in production
 DEFAULT_FROM_EMAIL = 'Your Study App Team <vampire.instinct777@gmail.com>'
 
-# For development, you can use Django's console email backend to see emails in console
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-
-# For production - actually sends emails
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+LOGGING = {
+    'version': 1,
+    'handlers': {'console': {'class': 'logging.StreamHandler'}},
+    'loggers': {
+        'channels': {'handlers': ['console'], 'level': 'DEBUG'},
+        'django.channels': {'handlers': ['console'], 'level': 'DEBUG'},
+    },
+}

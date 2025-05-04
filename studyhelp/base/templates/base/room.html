@@ -1,202 +1,298 @@
-{% extends "main.html" %}
+{% extends 'main.html' %}
+
 {% block content %}
+
 <style>
     .room-container {
         display: grid;
         grid-template-columns: 3fr 1fr;
         gap: 20px;
     }
-    
-    .comment_form {
+
+    .message-feed {
+        height: 65vh;
+        overflow-y: auto;
+        padding: 20px;
+        border: 1px solid #e5e5e5;
+        border-radius: 5px;
+        background-color: #f9f9f9;
+    }
+
+    .message-form {
         margin-top: 20px;
-        margin-bottom: 50px;
-        width: 100%;
+    }
+
+    .participants-box {
+        padding: 20px;
+        border: 1px solid #e5e5e5;
+        border-radius: 5px;
+        background-color: #f9f9f9;
+    }
+
+    .room-message {
+        padding: 10px 15px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        position: relative;
+    }
+
+    .my-message {
+        background-color: #dcf8c6;
+        margin-left: 40px;
+    }
+
+    .other-message {
+        background-color: #ffffff;
+        margin-right: 40px;
     }
     
-    .comment_form input[type="text"] {
-        width: 100%;
+    .message-user {
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    
+    .message-timestamp {
+        font-size: 0.7rem;
+        color: #888;
+        position: absolute;
+        bottom: 5px;
+        right: 10px;
+    }
+
+    .typing-indicator {
         padding: 10px;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        display: block;
-    }
-    
-    .comment-submit-btn {
-        margin-top: 10px;
-        padding: 8px 16px;
-        background-color: #4CAF50;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
+        color: #666;
+        font-style: italic;
     }
 
-    .message-container {
-        margin-bottom: 15px;
-    }
-
-    /* Force comment form to always be visible */
-    #comment-form-container {
-        display: block !important;
-    }
-    
-    .real-time-indicator {
-        color: green;
-        font-size: 12px;
+    /* Status badge for real-time indication */
+    .status-badge {
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 0.8rem;
         margin-left: 10px;
     }
     
-    #messages {
-        height: 400px;
-        overflow-y: auto;
-        padding: 10px;
-        border: 1px solid #eee;
-        margin-bottom: 20px;
+    .status-online {
+        background-color: #4CAF50;
+        color: white;
+    }
+    
+    .status-offline {
+        background-color: #f44336;
+        color: white; 
     }
 </style>
 
 <div class="room-container">
     <div>
-        <h1>{{room.name}} <span class="real-time-indicator" id="connection-status">Connecting...</span></h1>
-        <p>{{room.description}}</p>
-        <p>Created by: {{room.host}}</p>
-        <div class="comment-wrapper">
-            <h3>Conversations</h3>
-            <hr>
-            <div id="messages">
-                {% for message in room_messages %}
-                <div class="message-container" id="message-{{ message.id }}">
-                    {% if request.user == message.user %}
-                    <a href="{% url 'delete-message' message.id %}">delete</a>
-                    {% endif %}
-                    <small><a href="{% url 'user-profile' message.user.id %}">@{{message.user}}</a> {{message.created|timesince}} ago</small>
-                    <p>{{message.body}}</p>
-                    <hr>
+        <h1>{{ room.name }}</h1>
+        <p>{{ room.description }}</p>
+        <span id="connection-status" class="status-badge">
+            Connecting...
+        </span>
+        
+        <div class="message-feed" id="chat-messages">
+            {% for message in room_messages %}
+            <div class="room-message {% if message.user.id == request.user.id %}my-message{% else %}other-message{% endif %}">
+                <div class="message-user">
+                    <a href="{% url 'user-profile' message.user.id %}">@{{ message.user.username }}</a>
                 </div>
-                {% endfor %}
+                <div>{{ message.body }}</div>
+                <div class="message-timestamp">
+                    {{ message.created|date:"M d, Y H:i" }}
+                </div>
             </div>
-           
-            <div class="comment_form" id="comment-form-container">
-                {% if request.user.is_authenticated %}
-                    <form id="chat-form" method="POST">
-                        {% csrf_token %}
-                        <input type="hidden" name="room_id" id="room-id" value="{{ room.id }}">
-                        <input type="text" name="body" id="chat-message-input" placeholder="Add a comment..." required>
-                        <button type="submit" class="comment-submit-btn" id="chat-message-submit">Submit</button>
-                    </form>
-                {% else %}
-                    <p>Please <a href="{% url 'login' %}">login</a> to participate in this conversation.</p>
-                {% endif %}
-            </div>
+            {% endfor %}
         </div>
+        
+        <div id="typing-indicator" class="typing-indicator" style="display: none;">
+            Someone is typing...
+        </div>
+        
+        {% if request.user.is_authenticated %}
+        <div class="message-form">
+            <form id="chat-form">
+                {% csrf_token %}
+                <input 
+                    type="text" 
+                    name="body" 
+                    id="chat-message-input" 
+                    placeholder="Write your message here..."
+                />
+                <input type="submit" value="Send" id="chat-message-submit" />
+            </form>
+        </div>
+        {% endif %}
     </div>
     
-    <div>
-        <h3>Participants ({{participants.count}})</h3>
+    <div class="participants-box">
+        <h3>Participants</h3>
         <hr>
-        {% for member in participants %}
+        
+        {% for participant in participants %}
         <div>
-            <a href="{% url 'user-profile' member.id %}"><small>@{{member.username}}</small></a>
-            {% if member == room.host %}
-            <p>Host</p>
-            {% endif %}
-            {% if member == request.user %}
-            <p>You</p>
-            {% endif %}
+            <a href="{% url 'user-profile' participant.id %}">
+                @{{ participant.username }}
+            </a>
         </div>
         {% endfor %}
     </div>
 </div>
 
-<!-- Minimal JavaScript for WebSocket Connection -->
-{% if request.user.is_authenticated %}
 <script>
-    const roomId = {{ room.id }};
-    const userName = "{{ request.user.username }}";
-    const userId = {{ request.user.id }};
+    // Reference DOM elements
+    const messageContainer = document.getElementById('chat-messages');
+    const messageForm = document.getElementById('chat-form');
+    const messageInput = document.getElementById('chat-message-input');
+    const connectionStatus = document.getElementById('connection-status');
+    const typingIndicator = document.getElementById('typing-indicator');
     
-    // Create WebSocket connection
-    const chatSocket = new WebSocket(
-        'ws://' + window.location.host + '/ws/chat/' + roomId + '/'
-    );
+    // User information from Django context
+    const userId = "{{ request.user.id }}";
+    const username = "{{ request.user.username }}";
+    const roomName = "{{ room.id }}";
     
-    // Connection event handlers
-    chatSocket.onopen = function(e) {
-        document.querySelector('#connection-status').textContent = 'Connected';
-    };
+    // WebSocket connection and handling
+    let chatSocket = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
     
-    chatSocket.onclose = function(e) {
-        document.querySelector('#connection-status').textContent = 'Disconnected';
-        document.querySelector('#connection-status').style.color = 'red';
-    };
-    
-    // Message receiving
-    chatSocket.onmessage = function(e) {
-        const data = JSON.parse(e.data);
+    function connectWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const socketUrl = `${protocol}://${window.location.host}/ws/chat/${roomName}/`;
         
-        // Create message element
-        const messagesDiv = document.querySelector('#messages');
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'message-container';
-        messageDiv.id = 'message-' + data.message_id;
+        console.log(`Connecting to WebSocket at: ${socketUrl}`);
+        connectionStatus.textContent = 'Connecting...';
+        connectionStatus.className = 'status-badge';
         
-        // Add delete link if message is from current user
-        if (userId == data.user_id) {
-            const deleteLink = document.createElement('a');
-            deleteLink.href = '/delete-message/' + data.message_id;
-            deleteLink.textContent = 'delete';
-            messageDiv.appendChild(deleteLink);
-            messageDiv.appendChild(document.createTextNode(' '));
+        // Close existing socket if it exists
+        if (chatSocket) {
+            chatSocket.close();
         }
         
-        // Add user link and timestamp
-        const userInfo = document.createElement('small');
-        const userLink = document.createElement('a');
-        userLink.href = '/profile/' + data.user_id + '/';
-        userLink.textContent = '@' + data.username;
-        userInfo.appendChild(userLink);
-        userInfo.appendChild(document.createTextNode(' ' + data.timestamp));
-        messageDiv.appendChild(userInfo);
-        
-        // Add message content
-        const messageBody = document.createElement('p');
-        messageBody.textContent = data.message;
-        messageDiv.appendChild(messageBody);
-        
-        // Add separator
-        const hr = document.createElement('hr');
-        messageDiv.appendChild(hr);
-        
-        // Add to messages container and scroll to bottom
-        messagesDiv.appendChild(messageDiv);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    };
-    
-    // Form submission
-    document.querySelector('#chat-form').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const messageInput = document.querySelector('#chat-message-input');
-        const message = messageInput.value;
-        
-        if (message.trim()) {
-            // Send message through WebSocket
-            chatSocket.send(JSON.stringify({
-                'message': message,
-                'username': userName,
-                'user_id': userId,
-                'room_id': roomId
-            }));
+        // Create new WebSocket connection
+        chatSocket = new WebSocket(socketUrl);
+      
+        // Connection opened successfully
+        chatSocket.onopen = () => {
+            console.log('WebSocket connected');
+            connectionStatus.textContent = 'LIVE';
+            connectionStatus.classList.add('status-online');
+            reconnectAttempts = 0; // Reset reconnection attempts on successful connection
+        };
+      
+        // Connection closed
+        chatSocket.onclose = (e) => {
+            console.log('WebSocket closed', e);
+            connectionStatus.textContent = 'OFFLINE';
+            connectionStatus.classList.remove('status-online');
+            connectionStatus.classList.add('status-offline');
             
-            // Clear input field
-            messageInput.value = '';
-        }
-    });
+            // Try to reconnect if not closing cleanly
+            if (reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                const timeout = Math.min(2000 * reconnectAttempts, 10000); // Exponential backoff, max 10 seconds
+                console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts}) in ${timeout}ms`);
+                setTimeout(connectWebSocket, timeout);
+            } else {
+                console.error('Maximum reconnection attempts reached');
+                connectionStatus.textContent = 'Connection Failed';
+            }
+        };
+      
+        // Connection error
+        chatSocket.onerror = (e) => {
+            console.error('WebSocket error:', e);
+        };
+        
+        // When message is received
+        chatSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            console.log('Message received:', data);
+            
+            // Create new message element
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('room-message');
+            
+            // Check if this message is from current user
+            if (data.user_id == userId) {
+                messageElement.classList.add('my-message');
+            } else {
+                messageElement.classList.add('other-message');
+            }
+            
+            const userElement = document.createElement('div');
+            userElement.classList.add('message-user');
+            userElement.innerHTML = `<a href="/profile/${data.user_id}/">@${data.username}</a>`;
+            
+            const bodyElement = document.createElement('div');
+            bodyElement.textContent = data.message;
+            
+            const timestampElement = document.createElement('div');
+            timestampElement.classList.add('message-timestamp');
+            
+            // Format current time
+            const now = new Date();
+            const formattedTime = `${now.toLocaleString('default', { month: 'short' })} ${now.getDate()}, ${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            timestampElement.textContent = formattedTime;
+            
+            // Append all elements
+            messageElement.appendChild(userElement);
+            messageElement.appendChild(bodyElement);
+            messageElement.appendChild(timestampElement);
+            
+            // Add to chat container
+            messageContainer.appendChild(messageElement);
+            
+            // Scroll to the bottom of the chat
+            messageContainer.scrollTop = messageContainer.scrollHeight;
+        };
+    }
     
-    // Scroll to bottom on load
-    document.addEventListener('DOMContentLoaded', function() {
-        const messagesDiv = document.querySelector('#messages');
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    });
+    // Initialize WebSocket connection
+    connectWebSocket();
+    
+    // Handle message form submission
+    if (messageForm) {
+        messageForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const message = messageInput.value.trim();
+            if (message && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                chatSocket.send(JSON.stringify({
+                    'message': message,
+                    'username': username,
+                    'user_id': userId,
+                    'room_id': roomName
+                }));
+                
+                // Clear input field
+                messageInput.value = '';
+            } else if (chatSocket.readyState !== WebSocket.OPEN) {
+                alert("Connection lost. Please wait while we try to reconnect.");
+            }
+        });
+    }
+    
+    // Handle typing indicator
+    let typingTimeout = null;
+    if (messageInput) {
+        messageInput.addEventListener('input', function() {
+            // Here you could implement typing indicator logic
+            // For example, send a WebSocket message to notify others
+            
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(function() {
+                // Hide typing indicator after delay
+            }, 2000);
+        });
+    }
+    
+    // Auto-scroll to the bottom of the chat on page load
+    window.onload = function() {
+        messageContainer.scrollTop = messageContainer.scrollHeight;
+    };
 </script>
-{% endif %}
-{% endblock %}
+
+{% endblock content %}

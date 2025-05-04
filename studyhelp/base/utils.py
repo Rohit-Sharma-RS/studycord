@@ -39,11 +39,16 @@ def send_password_reset_email(user, token, request):
     html_message = render_to_string('base/email/password_reset_email.html', context)
     plain_message = strip_tags(html_message)
     
-    send_mail(
-        subject='Reset your password',
-        message=plain_message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        html_message=html_message,
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            subject='Reset your password',
+            message=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            html_message=html_message,
+            fail_silently=False,
+        )
+        return True
+    except Exception as e:
+        print(f"Error sending password reset email: {str(e)}")
+        return False

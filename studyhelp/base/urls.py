@@ -29,4 +29,3 @@ urlpatterns = [
     path('reset-password/<uuid:token>/', views.reset_password, name='reset-password'),
     path('test-email/', views.test_email, name='test-email'),
 ]
-
