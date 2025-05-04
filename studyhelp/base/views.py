@@ -10,6 +10,13 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.forms import UserCreationForm
 from .models import Room, Topic, User, Message
 from .forms import RoomForm, UserForm
+from django.contrib import messages
+from django.contrib.auth.forms import UserCreationForm
+from django.shortcuts import render, redirect
+from .models import Profile
+from .utils import send_verification_email
+from django.core.mail import send_mail
+from django.http import HttpResponse
 
 # rooms = [
 #     {'id': 1, 'name': "Let's learn python"},
@@ -36,21 +43,53 @@ def loginPage(request):
     context = {'page': page}
     return render(request, 'base/login_register.html', context)
 
+# Update in your views.py file
+
+
 def registerUser(request):
     form = UserCreationForm()
-    context = {'form': form}
+    
     if request.method == "POST":
         form = UserCreationForm(request.POST)
         if form.is_valid(): 
             user = form.save(commit=False)
-            user.username = user.username.lower() # make username lowercase
+            user.username = user.username.lower()
+            user.is_active = True  # Allow login but track verification separately
+            user.email = request.POST.get('email')  # Make sure to add email field to your form
             user.save()
-            login(request, user)
-            return redirect('home')
+            
+            # Create user profile with verification token
+            profile = Profile.objects.create(user=user)
+            
+            # Send verification email
+            send_verification_email(user, profile.verification_token, request)
+            
+            messages.success(
+                request, 
+                "Registration successful! Please check your email to verify your account."
+            )
+            
+            return redirect('login')
         else:
-            messages.error(request, "Some error occured during registration")
-
+            messages.error(request, "Some error occurred during registration")
+    
+    context = {'form': form}
     return render(request, 'base/login_register.html', context)
+
+def verify_email(request, token):
+    try:
+        profile = Profile.objects.get(verification_token=token)
+        if not profile.email_verified:
+            profile.email_verified = True
+            profile.save()
+            messages.success(request, "Your email has been verified successfully! You can now log in.")
+        else:
+            messages.info(request, "Your email was already verified.")
+        
+        return redirect('login')
+    except Profile.DoesNotExist:
+        messages.error(request, "Invalid verification link.")
+        return redirect('login')
 
 def logoutPage(request):
     logout(request)
@@ -118,7 +157,6 @@ def userProfile(request, pk):
 @login_required(login_url='/login') # only logged in users can create room
 def createRoom(request):
     form = RoomForm()
-
     if request.method == "POST":
         form = RoomForm(request.POST)
         if form.is_valid():
@@ -171,3 +209,129 @@ def updateUser(request, pk):
             return redirect('user-profile', pk=user.id)
     context={'form': form}
     return render(request, 'base/update-user.html', context)
+
+
+from django.contrib.auth.models import User
+from django.contrib.auth.hashers import make_password
+from .models import PasswordReset
+from .utils import send_password_reset_email
+
+def forgot_password(request):
+    if request.method == "POST":
+        email = request.POST.get('email')
+        print(f"Password reset requested for email: {email}")
+        
+        try:
+            user = User.objects.get(email=email)
+            print(f"User found: {user.username}")
+            
+            # Create reset token
+            reset_token = PasswordReset.objects.create(user=user)
+            print(f"Reset token created: {reset_token.token}")
+            
+            # Send reset email
+            email_sent = send_password_reset_email(user, reset_token.token, request)
+            
+            if email_sent:
+                print("Email appears to have been sent successfully")
+            else:
+                print("Email sending appears to have failed")
+            
+            messages.success(
+                request, 
+                "If an account with that email exists, we've sent password reset instructions."
+            )
+            return redirect('login')
+        except User.DoesNotExist:
+            print(f"No user found with email: {email}")
+            # For security, don't reveal if email exists or not
+            messages.success(
+                request, 
+                "If an account with that email exists, we've sent password reset instructions."
+            )
+            return redirect('login')
+    
+    return render(request, 'base/forgot_password.html')
+
+def test_email(request):
+    """A simple view to test email functionality."""
+    try:
+        result = send_mail(
+            subject='Test Email',
+            message='This is a test email from your Django application.',
+            from_email='vampire.instinct777@gmail.com',
+            recipient_list=['pavankpawankpavan@gmail.com'],  # Replace with your email
+            fail_silently=False,
+        )
+        return HttpResponse(f"Email test completed. Result: {result}")
+    except Exception as e:
+        return HttpResponse(f"Email test failed: {str(e)}")
+
+def reset_password(request, token):
+    try:
+        reset_token = PasswordReset.objects.get(token=token)
+        
+        if not reset_token.is_valid():
+            messages.error(request, "This password reset link has expired or already been used.")
+            return redirect('forgot-password')
+        
+        if request.method == "POST":
+            password = request.POST.get('password')
+            confirm_password = request.POST.get('confirm_password')
+            
+            if password != confirm_password:
+                messages.error(request, "Passwords do not match.")
+                return render(request, 'base/reset_password.html')
+            
+            # Update user's password
+            user = reset_token.user
+            user.password = make_password(password)
+            user.save()
+            
+            # Mark token as used
+            reset_token.used = True
+            reset_token.save()
+            
+            messages.success(request, "Your password has been reset successfully. You can now log in.")
+            return redirect('login')
+        
+        return render(request, 'base/reset_password.html')
+        
+    except PasswordReset.DoesNotExist:
+        messages.error(request, "Invalid password reset link.")
+        return redirect('forgot-password')
+    
+from django.contrib import messages
+from django.shortcuts import render, redirect
+from .models import Profile
+from .utils import send_verification_email
+from .forms import CustomUserCreationForm  # Import your custom form
+
+def registerUser(request):
+    form = CustomUserCreationForm()  # Use custom form
+    
+    if request.method == "POST":
+        form = CustomUserCreationForm(request.POST)  # Use custom form
+        if form.is_valid(): 
+            user = form.save(commit=False)
+            user.username = user.username.lower()
+            user.is_active = True  # Allow login but track verification separately
+            user.save()
+            
+            # Create user profile with verification token
+            profile = Profile.objects.create(user=user)
+            
+            # Send verification email
+            send_verification_email(user, profile.verification_token, request)
+            
+            messages.success(
+                request, 
+                "Registration successful! Please check your email to verify your account."
+            )
+            
+            return redirect('login')
+        else:
+            messages.error(request, "Some error occurred during registration")
+    
+    context = {'form': form}
+    return render(request, 'base/login_register.html', context)

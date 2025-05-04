@@ -39,33 +39,50 @@
     #comment-form-container {
         display: block !important;
     }
+    
+    .real-time-indicator {
+        color: green;
+        font-size: 12px;
+        margin-left: 10px;
+    }
+    
+    #messages {
+        height: 400px;
+        overflow-y: auto;
+        padding: 10px;
+        border: 1px solid #eee;
+        margin-bottom: 20px;
+    }
 </style>
 
 <div class="room-container">
     <div>
-        <h1>{{room.name}}</h1>
+        <h1>{{room.name}} <span class="real-time-indicator" id="connection-status">Connecting...</span></h1>
         <p>{{room.description}}</p>
         <p>Created by: {{room.host}}</p>
         <div class="comment-wrapper">
             <h3>Conversations</h3>
             <hr>
-            {% for message in room_messages %}
-            <div class="message-container">
-                <a href="{% url 'delete-message' message.id %}">delete</a>
-                <small>@{{message.user}} {{message.created|timesince}} ago</small>
-                <p>{{message.body}}</p>
-                <hr>
+            <div id="messages">
+                {% for message in room_messages %}
+                <div class="message-container" id="message-{{ message.id }}">
+                    {% if request.user == message.user %}
+                    <a href="{% url 'delete-message' message.id %}">delete</a>
+                    {% endif %}
+                    <small><a href="{% url 'user-profile' message.user.id %}">@{{message.user}}</a> {{message.created|timesince}} ago</small>
+                    <p>{{message.body}}</p>
+                    <hr>
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
            
-            <!-- Always show the form container - no conditional here -->
             <div class="comment_form" id="comment-form-container">
                 {% if request.user.is_authenticated %}
-                    <form method="POST" action="{% url 'room' room.id %}">
+                    <form id="chat-form" method="POST">
                         {% csrf_token %}
-                        <input type="hidden" name="room_id" value="{{ room.id }}">
-                        <input type="text" name="body" placeholder="Add a comment..." required>
-                        <button type="submit" class="comment-submit-btn">Submit</button>
+                        <input type="hidden" name="room_id" id="room-id" value="{{ room.id }}">
+                        <input type="text" name="body" id="chat-message-input" placeholder="Add a comment..." required>
+                        <button type="submit" class="comment-submit-btn" id="chat-message-submit">Submit</button>
                     </form>
                 {% else %}
                     <p>Please <a href="{% url 'login' %}">login</a> to participate in this conversation.</p>
@@ -79,7 +96,7 @@
         <hr>
         {% for member in participants %}
         <div>
-            <small>@{{member.username}}</small>
+            <a href="{% url 'user-profile' member.id %}"><small>@{{member.username}}</small></a>
             {% if member == room.host %}
             <p>Host</p>
             {% endif %}
@@ -91,13 +108,95 @@
     </div>
 </div>
 
-<!-- Simple JavaScript to ensure visibility -->
+<!-- Minimal JavaScript for WebSocket Connection -->
+{% if request.user.is_authenticated %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const formContainer = document.getElementById('comment-form-container');
-        if (formContainer) {
-            formContainer.style.display = 'block';
+    const roomId = {{ room.id }};
+    const userName = "{{ request.user.username }}";
+    const userId = {{ request.user.id }};
+    
+    // Create WebSocket connection
+    const chatSocket = new WebSocket(
+        'ws://' + window.location.host + '/ws/chat/' + roomId + '/'
+    );
+    
+    // Connection event handlers
+    chatSocket.onopen = function(e) {
+        document.querySelector('#connection-status').textContent = 'Connected';
+    };
+    
+    chatSocket.onclose = function(e) {
+        document.querySelector('#connection-status').textContent = 'Disconnected';
+        document.querySelector('#connection-status').style.color = 'red';
+    };
+    
+    // Message receiving
+    chatSocket.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        
+        // Create message element
+        const messagesDiv = document.querySelector('#messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message-container';
+        messageDiv.id = 'message-' + data.message_id;
+        
+        // Add delete link if message is from current user
+        if (userId == data.user_id) {
+            const deleteLink = document.createElement('a');
+            deleteLink.href = '/delete-message/' + data.message_id;
+            deleteLink.textContent = 'delete';
+            messageDiv.appendChild(deleteLink);
+            messageDiv.appendChild(document.createTextNode(' '));
+        }
+        
+        // Add user link and timestamp
+        const userInfo = document.createElement('small');
+        const userLink = document.createElement('a');
+        userLink.href = '/profile/' + data.user_id + '/';
+        userLink.textContent = '@' + data.username;
+        userInfo.appendChild(userLink);
+        userInfo.appendChild(document.createTextNode(' ' + data.timestamp));
+        messageDiv.appendChild(userInfo);
+        
+        // Add message content
+        const messageBody = document.createElement('p');
+        messageBody.textContent = data.message;
+        messageDiv.appendChild(messageBody);
+        
+        // Add separator
+        const hr = document.createElement('hr');
+        messageDiv.appendChild(hr);
+        
+        // Add to messages container and scroll to bottom
+        messagesDiv.appendChild(messageDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    };
+    
+    // Form submission
+    document.querySelector('#chat-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const messageInput = document.querySelector('#chat-message-input');
+        const message = messageInput.value;
+        
+        if (message.trim()) {
+            // Send message through WebSocket
+            chatSocket.send(JSON.stringify({
+                'message': message,
+                'username': userName,
+                'user_id': userId,
+                'room_id': roomId
+            }));
+            
+            // Clear input field
+            messageInput.value = '';
         }
     });
+    
+    // Scroll to bottom on load
+    document.addEventListener('DOMContentLoaded', function() {
+        const messagesDiv = document.querySelector('#messages');
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    });
 </script>
+{% endif %}
 {% endblock %}

@@ -44,7 +44,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    'base.apps.BaseConfig'
+    'base.apps.BaseConfig',
+    'channels',
 ]
 
 MIDDLEWARE = [
@@ -56,6 +57,17 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer'
+        # For production we use Redis:
+        # 'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        # 'CONFIG': {
+        #     "hosts": [('127.0.0.1', 6379)],
+        # },
+    },
+}
 
 ROOT_URLCONF = 'studyhelp.urls'
 
@@ -131,3 +143,19 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Email configuration
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'  # Or your preferred email provider
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'vampire.instinct777@gmail.com'  # Use environment variables in production
+EMAIL_HOST_PASSWORD = 'ryumvmufdzrgguae'  # Use environment variables in production
+DEFAULT_FROM_EMAIL = 'Your Study App Team <vampire.instinct777@gmail.com>'
+
+# For development, you can use Django's console email backend to see emails in console
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# For production - actually sends emails
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

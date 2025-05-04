@@ -9,11 +9,12 @@
         <input type="text" name="username" placeholder="Enter Username"><br>
         <label>Password:</label>
         <input type="password" name="password" placeholder="Enter Password"><br>
-        <label>Confirm Password:</label>
-        <input type="password" name="confirm_password" placeholder="Confirm Password"><br>
 
         <input type="submit" value="Login">
     </form>
+    
+    <p><a href="{% url 'forgot-password' %}">Forgot Password?</a></p>
+    
     <p>Haven't Signed up yet? </p>
     <a href="{% url 'register' %}">Register</a>
 </div>
